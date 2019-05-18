@@ -292,7 +292,7 @@ class AimBot {
             closestPlayer = currentPlayer
         }
     }
-    if(closestPlayer != null && closestPlayer.validate()){        
+    if(closestPlayer != null && closestPlayer.validate() && closestPlayer.health > 0 && closestPlayer.isVisible){        
         var bonePos = closestPlayer.headPosition.project()
         var sP2 = Vec2.new(0, 0)
         var head = aimTar(closestPlayer) //_closestPlayer.getBonePosition(2).project() 
