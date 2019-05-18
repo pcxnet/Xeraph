@@ -138,6 +138,31 @@ class Common {
     static multiplyVectorN(vec1, n) {
      return Vec3.new(vec1.x * n, vec1.y * n, vec1.z * n)
     }
+    static drawCircle(x,y,r2,c) {
+       x = Graphics.screenWidth * (x + 1)/2
+       y = Graphics.screenHeight * (1 - y)/2
+        var xf = null
+        var yf = null
+        for(i in 1..64) {
+            var ang = i / 30 * Num.pi
+            var xt = x + r2 * ang.cos
+            var yt = y + r2 * ang.sin
+            if(xf != null) {
+            var res1 = Vec3.new(2 * (xt/Graphics.screenWidth) - 1,-2 * (yt/Graphics.screenHeight) + 1,0)
+            var res2 = Vec3.new(2 * (xf/Graphics.screenWidth) - 1,-2 * (yf/Graphics.screenHeight) + 1,0)
+                Graphics.addLine(res1.x,res1.y,c,res2.x,res2.y,c)
+            }
+            xf = xt
+            yf = yt
+        }
+    }
+    static drawFov(radius,drawfov) {
+    	var tc = Graphics.colorARGB(255,255,255,255)
+    	var screenM = Vec2.new(0,0)
+    	if(drawfov) {
+    	drawCircle(screenM.x, screenM.y, radius, tc)
+        }
+    }
 
 }
 
@@ -213,6 +238,22 @@ class AimBot {
 
     }
 
+    static pointInCircle(point,cirCenter,radius) {
+        var x = Graphics.screenWidth * (cirCenter.x + 1)/2
+        var y = Graphics.screenHeight * (1 - cirCenter.y)/2
+        var cirScreen = Vec2.new(x,y)
+    	var res = (((cirScreen.x - point.x) * (cirScreen.x - point.x)) + ((cirScreen.y - point.y) * (cirScreen.y - point.y)))
+    	System.print("%(res.sqrt)")
+    	return res.sqrt < radius
+    }
+    static aimTar(currentPlayer) {
+    	var bonePos = currentPlayer.headPosition.project()
+    	var x = Graphics.screenWidth * (bonePos.x + 1)/2
+        var y = Graphics.screenHeight * (1 - bonePos.y)/2
+        return Vec2.new(x,y)
+    }
+
+    
     static shootClosestEnemy(keyDown,speed) {
     	var	lowestDistance = 99999
 	    var	closestPlayer = null
@@ -235,7 +276,35 @@ class AimBot {
     }
 
   }
+  
+  static shootClosestFov(keyDown,speed,fov,drawfov) {
+        Common.drawFov(fov,drawfov)
+    	var	lowestDistance = 99999
+	    var	closestPlayer = null
+        for(currentPlayer in Engine.getEnemies()) {
+        var currentPlayerPos = currentPlayer.headPosition.project()
+        var curP = Vec2.new(currentPlayerPos.x,currentPlayerPos.y)
+        var sP = Vec2.new(0, 0)
+        var currentPlayerDistance = curP.distTo(sP)
 
+        if(currentPlayerDistance < lowestDistance) {
+            lowestDistance = currentPlayerDistance
+            closestPlayer = currentPlayer
+        }
+    }
+    if(closestPlayer != null && closestPlayer.validate()){        
+        var bonePos = closestPlayer.headPosition.project()
+        var sP2 = Vec2.new(0, 0)
+        var head = aimTar(closestPlayer) //_closestPlayer.getBonePosition(2).project() 
+         if(OS.isKeyDown(keyDown) && pointInCircle(head,sP2,fov)){
+             aimTarget(bonePos.x,bonePos.y,speed)  
+         }   
+    }
+
+  }
+  
+ 
+ 
   static shootClosestEnemyAna(keyDown,speed) {
     	var	lowestDistance = 99999
 	    var	closestPlayer = null
@@ -325,7 +394,7 @@ class AimBot {
 
   }
 
-  static logicShoot(keyDown,enespeed,allspeed) {
+  static logicShoot(keyDown,keyDown2,sleepSpeed,healSpeed,shootSpeed) {
   	    var	lowestHealth = 99999
 	    var	closestPlayer = null
         for(currentPlayer in Engine.getAllies()) {
@@ -336,13 +405,18 @@ class AimBot {
             closestPlayer = currentPlayer
         }
     }
-    if(closestPlayer != null && closestPlayer.validate() && closestPlayer.health > 0 && closestPlayer.isVisible && Common.entityHealthPercent(closestPlayer) < 85 ){        
-        var bonePos = closestPlayer.headPosition.project() //_closestPlayer.getBonePosition(2).project() 
+    if(OS.isKeyDown(keyDown2)) {
+    	shootClosestEnemyAna(keyDown2,sleepSpeed)
+    }
+    if(closestPlayer != null && closestPlayer.validate() && closestPlayer.health > 0 && closestPlayer.isVisible && Common.entityHealthPercent(closestPlayer) < 75 ){        
+        var bonePos = closestPlayer.getBonePosition(2).project() 
          if(OS.isKeyDown(keyDown)){
-             aimTarget(bonePos.x,bonePos.y,allspeed)  
+             aimTarget(bonePos.x,bonePos.y,healSpeed)  
          }   
     } else {
-    	shootClosestEnemyAna(keyDown,enespeed)
+    	if(OS.isKeyDown(keyDown)){
+    	shootClosestEnemyAna(keyDown,shootSpeed)
+    }
     }
   }
 
@@ -389,6 +463,8 @@ class GraphicsEvent is IGraphicsListener {
 	static onDraw() {
     var key = Global.AimSettings.keys["LB"]
     var speed = 5.5  // 1 - 100 smoothing
+    var fov = 25
+    var drawfov = true
     var localPlayer = Engine.getLocalPlayer()
     //Future Pred Based Aimbot
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Genji") {
@@ -438,48 +514,61 @@ class GraphicsEvent is IGraphicsListener {
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Mccree") {
           key = Global.AimSettings.keys["LB"]
           speed = 3
-          
-          AimBot.shootClosestEnemy(key,speed)
+          fov = 100         
+            //Aimbot.shootNearCrossHairFov(key,speed,fov)
+            AimBot.shootClosestFov(key,speed,fov,drawfov)
+          //AimBot.shootClosestEnemy(key,speed)       
     }
 
     //FPS Aimbot
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Tracer") {
           key = Global.AimSettings.keys["LB"]
           speed = 12
-          
-          AimBot.shootClosestEnemy(key,speed)
+          fov = 100
+
+          AimBot.shootClosestFov(key,speed,fov,drawfov)
     }
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Soldier76") {
           key = Global.AimSettings.keys["LB"]
           speed = 12
-          
-          AimBot.shootClosestEnemy(key,speed)
+          fov = 100
+
+          AimBot.shootClosestFov(key,speed,fov,drawfov)
     }
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Bastion") {
           key = Global.AimSettings.keys["LB"]
           speed = 12
-          
-          AimBot.shootClosestEnemy(key,speed)
+          fov = 100
+
+          AimBot.shootClosestFov(key,speed,fov,drawfov)
     }
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Dva") {
           key = Global.AimSettings.keys["LB"]
           speed = 10
-          AimBot.shootClosestEnemy(key,speed)
+          fov = 100
+
+          AimBot.shootClosestFov(key,speed,fov,drawfov)
     }
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Orisa") {
           key = Global.AimSettings.keys["LB"]
           speed = 10
-          AimBot.shootClosestEnemy(key,speed)
+          fov = 100
+
+          AimBot.shootClosestFov(key,speed,fov,drawfov)
     }
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Reaper") {
           key = Global.AimSettings.keys["LB"]
           speed = 10
-          AimBot.shootClosestEnemy(key,speed)
+          fov = 100
+
+          AimBot.shootClosestFov(key,speed,fov,drawfov)
     }
      if (Global.AimSettings.heroes[localPlayer.heroId] == "Sombra") {
           key = Global.AimSettings.keys["LB"]
           speed = 10
-          AimBot.shootClosestEnemy(key,speed)
+          fov = 100
+
+          AimBot.shootClosestFov(key,speed,fov,drawfov)
     }
 
     //Smart Logic/Adaptive Smoothing Aimbot
@@ -490,18 +579,27 @@ class GraphicsEvent is IGraphicsListener {
       var healSpeed = 2.5 //speed to heal allies
           speed = 4.5 //speed to hit enemies
 
-          AimBot.logicShoot2(key,key2,sleepSpeed,healSpeed,speed)
+          AimBot.logicShoot(key,key2,sleepSpeed,healSpeed,speed)
     }
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Widowmaker") {
           key = Global.AimSettings.keys["LB"]
           var key2 = Global.AimSettings.keys["RB"]
           var speed2 = 10 //Speed without scoping
           speed = 1.2 //speed with scoping
+          fov = 100
+          
+          if(OS.isKeyDown(key2)) {
+             Common.drawFov(fov * 2,drawfov)
+          }
+          if(!OS.isKeyDown(key2)) {
+            Common.drawFov(fov,drawfov)  
+          }
+          
           if(OS.isKeyDown(key2) && OS.isKeyDown(key)){
-          AimBot.shootClosestEnemy(key,speed)
+          AimBot.shootClosestFov(key,speed,fov * 2,false)
           }
           if(OS.isKeyDown(key)) {
-      	     AimBot.shootClosestEnemy(key,speed2)
+      	     AimBot.shootClosestFov(key,speed2,fov,false)
           }
     }
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Ashe") {
@@ -509,11 +607,19 @@ class GraphicsEvent is IGraphicsListener {
           var key2 = Global.AimSettings.keys["RB"]
           var speed2 = 7.5 //Speed without scoping
           speed = 3.5 //speed with scoping
+          
+          if(OS.isKeyDown(key2)) {
+             Common.drawFov(fov * 2,drawfov)
+          }
+          if(!OS.isKeyDown(key2)) {
+            Common.drawFov(fov,drawfov)  
+          }
+          
           if(OS.isKeyDown(key2) && OS.isKeyDown(key)){
-          AimBot.shootClosestEnemy(key,speed)
+           AimBot.shootClosestFov(key,speed,fov * 2,false)
           }
           if(OS.isKeyDown(key)) {
-      	     AimBot.shootClosestEnemy(key,speed2)
+      	      AimBot.shootClosestFov(key,speed2,fov,false)
           }
     }
 
