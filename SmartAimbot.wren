@@ -579,7 +579,7 @@ class GraphicsEvent is IGraphicsListener {
       var healSpeed = 2.5 //speed to heal allies
           speed = 4.5 //speed to hit enemies
 
-          AimBot.logicShoot(key,key2,sleepSpeed,healSpeed,speed)
+          AimBot.logicShoot2(key,key2,sleepSpeed,healSpeed,speed)
     }
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Widowmaker") {
           key = Global.AimSettings.keys["LB"]
