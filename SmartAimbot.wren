@@ -437,16 +437,9 @@ class GraphicsEvent is IGraphicsListener {
     //Flick Based Aimbot
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Mccree") {
           key = Global.AimSettings.keys["LB"]
-      var key2 = Global.AimSettings.keys["RB"]
-      var speed2 = 7
           speed = 3
-          if(OS.isKeyDown(key) { 
+          
           AimBot.shootClosestEnemy(key,speed)
-      }
-
-          if(OS.isKeyDown(key2) {
-          	AimBot.shootClosestEnemyAna(key2,speed2)
-          }
     }
 
     //FPS Aimbot
