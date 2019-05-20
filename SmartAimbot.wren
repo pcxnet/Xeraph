@@ -770,6 +770,7 @@ class GraphicsEvent is IGraphicsListener {
           var key2 = Global.AimSettings.keys["RB"]
           var speed2 = 7.5 //Speed without scoping
           speed = 3.5 //speed with scoping
+          fov = 100
           
           if(OS.isKeyDown(key2)) {
              Common.drawFov(fov * 2,drawfov)
