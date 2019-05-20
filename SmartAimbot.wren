@@ -73,10 +73,54 @@ class AimSettings {
             418: "Moira",
             32: "Zenyatta",
         }
+
+        _projectileSpeed = {
+			41: 75, 
+			5: 110,
+			32: 110,
+			4: 60,
+			6: 70,
+			121: 60,
+			318: 120,
+			122: 60,
+			221: 120
+		}
+		_projectileGravity = {
+			41: 0,
+			5: 9.8,
+			32: 0,
+			4: 0,
+			6: 9.8,
+			121: 0,
+			318: 0,
+			122: 0,
+			221: 0
+		}
 	} 
 	keys { _keys }
 	heroes { _heroes }
 	dmg { _dmg }
+	projectileSpeed { _projectileSpeed }
+	projectileGravity { _projectileGravity }
+}
+
+class FPSCounter { 
+	construct new() { 
+	_lastTick = 0
+	_fps = 0
+	_fps_temp = 0
+	}
+	fps { _fps }	
+	handle(time) {
+		var currentTick = time * 0.001
+		_fps_temp = _fps_temp + 1
+		if ((currentTick - _lastTick) > 1) {
+			_lastTick = currentTick
+			_fps = _fps_temp
+			_fps_temp = 0
+		}
+		
+	}
 }
 
 
@@ -164,6 +208,54 @@ class Common {
         }
     }
 
+}
+
+class AimPred {
+  //Thanks to qwert1119
+    static calcGravityZ(z, projGravity, projTravelTime) {
+		return z + (projGravity * projTravelTime.pow(2) * 0.5)
+	}
+	static calcStaticTarget(entAimVec, projectileTravelTime, projectileGravity) {
+		entAimVec.z = calcGravityZ(entAimVec.z, projectileGravity, projectileTravelTime)
+		return entAimVec
+	}
+	static calcMovingTarget(uid, entBasePos, entAimVec, projectileTravelTime, projectileGravity) {
+		var targetVelocityVec3 = entBasePos.sub(Global.PositionCache[uid])
+		var targetSpeed = Global.PositionCache[uid].distTo(entBasePos) * Global.FPSCounter.fps 
+		var predictionScale = projectileTravelTime * targetSpeed
+		var predictedPos = (entAimVec.add(targetVelocityVec3.normalized().scale(predictionScale)))
+		predictedPos.z = calcGravityZ(predictedPos.z, projectileGravity, projectileTravelTime)
+		return predictedPos
+	}
+   
+	static predAim() {
+		var lPlayer = Engine.getLocalPlayer()
+		if (lPlayer && Global.AimSettings.projectileSpeed.containsKey(lPlayer.heroId)) {
+			var enemies = Engine.getEnemies()
+			if (enemies) { 
+				for(ent in enemies) {
+					var uid = ent.uid
+					if (ent.health > 0) {
+						var localPlayerPos = lPlayer.basePosition
+						var basePos = ent.basePosition
+						var headPos = ent.headPosition 
+						if (!Global.PositionCache[uid]) { Global.PositionCache[uid] = basePos }
+
+						var distance = basePos.distTo(localPlayerPos)
+						var projectileTravelTime = distance / Global.AimSettings.projectileSpeed[lPlayer.heroId]
+						var aimPos = null
+						if (Global.PositionCache[uid].x == basePos.x && Global.PositionCache[uid].y == basePos.y && Global.PositionCache[uid].z == basePos.z) {
+							aimPos = calcStaticTarget(headPos, projectileTravelTime, Global.AimSettings.projectileGravity[lPlayer.heroId])
+						} else {
+							aimPos = calcMovingTarget(uid, basePos, headPos, projectileTravelTime, Global.AimSettings.projectileGravity[lPlayer.heroId])
+						}
+						Global.PredictedCache[uid] = aimPos
+						Global.PositionCache[uid] = basePos
+					}
+				}
+			}
+	    }
+    }
 }
 
 class AimBot {
@@ -270,6 +362,12 @@ class AimBot {
     }
     if(closestPlayer != null && closestPlayer.validate() && closestPlayer.health > 0 && closestPlayer.isVisible){        
         var bonePos = closestPlayer.headPosition.project() //_closestPlayer.getBonePosition(2).project() 
+        
+        var lp = Engine.getLocalPlayer()
+        if (Global.AimSettings.projectileSpeed.containsKey(lp.heroId) || Global.PredictedCache[closestPlayer.uid] || (lp.heroId == 122 && lp.healthMax <= 400)) {
+        	bonePos = Global.PredictedCache[closestPlayer.uid].project()
+        }
+
          if(OS.isKeyDown(keyDown)){
              aimTarget(bonePos.x,bonePos.y,speed)  
          }   
@@ -292,18 +390,21 @@ class AimBot {
             closestPlayer = currentPlayer
         }
     }
-    if(closestPlayer != null && closestPlayer.validate() && closestPlayer.health > 0 && closestPlayer.isVisible){        
+    if(closestPlayer != null && closestPlayer.validate()){        
         var bonePos = closestPlayer.headPosition.project()
-        var sP2 = Vec2.new(0, 0)
+        var lp = Engine.getLocalPlayer()
+        if (Global.AimSettings.projectileSpeed.containsKey(lp.heroId) || Global.PredictedCache[closestPlayer.uid] || (lp.heroId == 122 && lp.healthMax <= 400)) {
+        	bonePos = Global.PredictedCache[closestPlayer.uid].project()
+        }
+
+        var sP2 = Vec2.new(Graphics.screenWidth/2, Graphics.screenHeight/2)
         var head = aimTar(closestPlayer) //_closestPlayer.getBonePosition(2).project() 
-         if(OS.isKeyDown(keyDown) && pointInCircle(head,sP2,fov)){
+         if(OS.isKeyDown(keyDown) && pointInCircle(sP2,bonePos,fov) && closestPlayer.health > 0 && closestPlayer.isVisible){
              aimTarget(bonePos.x,bonePos.y,speed)  
          }   
     }
 
   }
-  
- 
  
   static shootClosestEnemyAna(keyDown,speed) {
     	var	lowestDistance = 99999
@@ -327,6 +428,45 @@ class AimBot {
     }
 
   }
+  
+  static drawLine() {
+     var fc = Graphics.colorARGB(0,1,0,0)
+        var tc = Graphics.colorARGB(1,1,0,0)
+        var fx = 0
+        var fy = -0.25
+        
+        for(ent in Engine.getEnemies()) {
+            var screenPos = ent.boundingBoxMin.project()
+            var sP = Vec2.new(Graphics.screenWidth/2, Graphics.screenHeight/2)
+            if(screenPos.validate() && ent.health > 0){
+                Common.drawCircle(screenPos.x, screenPos.y, 20, tc)
+                //Graphics.addLine(fx,fy,fc,screenPos.x,screenPos.y,tc)
+            }
+            if(pointInCircle(sP,screenPos,20)) {
+               Graphics.addLine(fx,fy,fc,screenPos.x,screenPos.y,tc)
+            }
+        }
+ }
+ 
+ static drawLine2() {
+     var fc = Graphics.colorARGB(0,1,0,0)
+        var tc = Graphics.colorARGB(1,1,0,0)
+        var fx = 0
+        var fy = -0.25
+        
+        for(ent in Engine.getEnemies()) {
+            var screenPos = ent.headPosition.project()
+            var sP = Vec2.new(Graphics.screenWidth/2, Graphics.screenHeight/2)
+            if(screenPos.validate() && ent.health > 0){
+                Common.drawCircle(screenPos.x, screenPos.y, 20, tc)
+                //Graphics.addLine(fx,fy,fc,screenPos.x,screenPos.y,tc)
+            }
+            if(pointInCircle(sP,screenPos,100)) {
+               Graphics.addLine(fx,fy,fc,screenPos.x,screenPos.y,tc)
+            }
+        }
+ }
+ 
 
   static shootVisableEnemy(keyDown,speed) {
     	var	lowestDistance = 0
@@ -374,6 +514,7 @@ class AimBot {
 
   }
 
+  
   static heallowestAlly(keyDown,speed) {
     	var	lowestHealth = 99999
 	    var	closestPlayer = null
@@ -451,16 +592,30 @@ class AimBot {
 }
 
 class Global {
-    static init() {   
+    static init() {  
+        if (!__PositionCache) {
+            __PositionCache = {}
+        }
+		if (!__PredictedCache) {
+			__PredictedCache = {}
+		} 
 		if(!__AimSettings) {
 			__AimSettings = AimSettings.new()
 		}
+		if (!__FPSCounter) {
+			__FPSCounter = FPSCounter.new()
+		}
     }
 	static AimSettings { __AimSettings }
+	static FPSCounter { __FPSCounter }
+	static PositionCache { __PositionCache }
+	static PredictedCache { __PredictedCache }
 }
 
 class GraphicsEvent is IGraphicsListener {
 	static onDraw() {
+	Global.FPSCounter.handle(OS.time)
+	AimPred.predAim()
     var key = Global.AimSettings.keys["LB"]
     var speed = 5.5  // 1 - 100 smoothing
     var fov = 25
@@ -469,52 +624,60 @@ class GraphicsEvent is IGraphicsListener {
     //Future Pred Based Aimbot
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Genji") {
           key = Global.AimSettings.keys["LB"]
-          speed = 9.5
+          speed = 3
+          fov = 100
           
-          //AimBot.shootClosestEnemy(key,speed)
+          AimBot.shootClosestFov(key,speed,fov,drawfov)
     }
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Torbjorn") {
           key = Global.AimSettings.keys["LB"]
           speed = 4.5
+          fov = 100
           
-          //AimBot.shootClosestEnemy(key,speed)
+          AimBot.shootClosestFov(key,speed,fov,drawfov)
     }
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Hanzo") {
           key = Global.AimSettings.keys["LB"]
           speed = 4.5
+          fov = 100
           
-          //AimBot.shootClosestEnemy(key,speed)
+          AimBot.shootClosestFov(key,speed,fov,drawfov)
     }
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Mei") {
           key = Global.AimSettings.keys["LB"]
           speed = 4.5
+          fov = 100
           
-          //AimBot.shootClosestEnemy(key,speed)
+          AimBot.shootClosestFov(key,speed,fov,drawfov)
     }
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Mercy") {
           key = Global.AimSettings.keys["LB"]
           speed = 4.5
+          fov = 100
           
-          //AimBot.shootClosestEnemy(key,speed)
+          AimBot.shootClosestFov(key,speed,fov,drawfov)
     }
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Lucio") {
           key = Global.AimSettings.keys["LB"]
           speed = 4.5
+          fov = 100
           
-          //AimBot.shootClosestEnemy(key,speed)
+          AimBot.shootClosestFov(key,speed,fov,drawfov)
     }
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Zenyatta") {
           key = Global.AimSettings.keys["LB"]
           speed = 4.5
+          fov = 100
           
-          //AimBot.shootClosestEnemy(key,speed)
+          AimBot.shootClosestFov(key,speed,fov,drawfov)
     }
     
     //Flick Based Aimbot
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Mccree") {
           key = Global.AimSettings.keys["LB"]
-          speed = 3
-          fov = 100         
+          speed = 2
+          fov = 100     
+          //AimBot.pointInCircleCheck()
             //Aimbot.shootNearCrossHairFov(key,speed,fov)
             AimBot.shootClosestFov(key,speed,fov,drawfov)
           //AimBot.shootClosestEnemy(key,speed)       
@@ -530,14 +693,14 @@ class GraphicsEvent is IGraphicsListener {
     }
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Soldier76") {
           key = Global.AimSettings.keys["LB"]
-          speed = 12
+          speed = 10
           fov = 100
 
           AimBot.shootClosestFov(key,speed,fov,drawfov)
     }
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Bastion") {
           key = Global.AimSettings.keys["LB"]
-          speed = 12
+          speed = 10
           fov = 100
 
           AimBot.shootClosestFov(key,speed,fov,drawfov)
@@ -579,7 +742,7 @@ class GraphicsEvent is IGraphicsListener {
       var healSpeed = 2.5 //speed to heal allies
           speed = 4.5 //speed to hit enemies
 
-          AimBot.logicShoot2(key,key2,sleepSpeed,healSpeed,speed)
+          AimBot.logicShoot(key,key2,sleepSpeed,healSpeed,speed)
     }
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Widowmaker") {
           key = Global.AimSettings.keys["LB"]
