@@ -76,7 +76,7 @@ class AimSettings {
 
         _projectileSpeed = {
 			41: 75, 
-			5: 110,
+			5: 65,
 			32: 110,
 			4: 60,
 			6: 70,
@@ -87,7 +87,7 @@ class AimSettings {
 		}
 		_projectileGravity = {
 			41: 0,
-			5: 9.8,
+			5: 2,
 			32: 0,
 			4: 0,
 			6: 9.8,
