@@ -6,7 +6,8 @@ class AimSettings {
 		_keys = {
             "LB": 0x01,
             "RB": 0x02,
-            "LS": 0xA0
+            "LS": 0xA0,
+            "ALT": 0x12
         }
 		_heroes = {
             64: "RoadHog",
@@ -76,19 +77,23 @@ class AimSettings {
 
         _projectileSpeed = {
 			41: 75, 
-			5: 65,
+			5: 110,
 			32: 110,
+			64: 40,
 			4: 60,
 			6: 70,
 			121: 60,
 			318: 120,
 			122: 60,
+			303: 40,
 			221: 120
 		}
 		_projectileGravity = {
 			41: 0,
-			5: 2,
+			303: 0,
+			5: 9.8,
 			32: 0,
+			64: 0,
 			4: 0,
 			6: 9.8,
 			121: 0,
@@ -405,7 +410,35 @@ class AimBot {
     }
 
   }
- 
+  static shootClosestFovNoPred(keyDown,speed,fov,drawfov) {
+        Common.drawFov(fov,drawfov)
+    	var	lowestDistance = 99999
+	    var	closestPlayer = null
+        for(currentPlayer in Engine.getEnemies()) {
+        var currentPlayerPos = currentPlayer.headPosition.project()
+        var curP = Vec2.new(currentPlayerPos.x,currentPlayerPos.y)
+        var sP = Vec2.new(0, 0)
+        var currentPlayerDistance = curP.distTo(sP)
+
+        if(currentPlayerDistance < lowestDistance) {
+            lowestDistance = currentPlayerDistance
+            closestPlayer = currentPlayer
+        }
+    }
+    if(closestPlayer != null && closestPlayer.validate()){        
+        var bonePos = closestPlayer.headPosition.project()
+        var lp = Engine.getLocalPlayer()
+
+
+        var sP2 = Vec2.new(Graphics.screenWidth/2, Graphics.screenHeight/2)
+        var head = aimTar(closestPlayer) //_closestPlayer.getBonePosition(2).project() 
+         if(OS.isKeyDown(keyDown) && pointInCircle(sP2,bonePos,fov) && closestPlayer.health > 0 && closestPlayer.isVisible){
+             aimTarget(bonePos.x,bonePos.y,speed)  
+         }   
+    }
+
+  }
+  
   static shootClosestEnemyAna(keyDown,speed) {
     	var	lowestDistance = 99999
 	    var	closestPlayer = null
@@ -623,7 +656,7 @@ class GraphicsEvent is IGraphicsListener {
     var localPlayer = Engine.getLocalPlayer()
     //Future Pred Based Aimbot
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Genji") {
-          key = Global.AimSettings.keys["LB"]
+          key = Global.AimSettings.keys["ALT"]
           speed = 3
           fov = 100
           
@@ -637,8 +670,9 @@ class GraphicsEvent is IGraphicsListener {
           AimBot.shootClosestFov(key,speed,fov,drawfov)
     }
     if (Global.AimSettings.heroes[localPlayer.heroId] == "Hanzo") {
-          key = Global.AimSettings.keys["LB"]
+          key = Global.AimSettings.keys["ALT"]
           speed = 4.5
+         
           fov = 100
           
           AimBot.shootClosestFov(key,speed,fov,drawfov)
@@ -731,6 +765,41 @@ class GraphicsEvent is IGraphicsListener {
           speed = 10
           fov = 100
 
+          AimBot.shootClosestFov(key,speed,fov,drawfov)
+    }
+         if (Global.AimSettings.heroes[localPlayer.heroId] == "Doomfist") {
+          key = Global.AimSettings.keys["ALT"]
+          speed = 2
+          fov = 250
+
+          AimBot.shootClosestFov(key,speed,fov,drawfov)
+    }
+        // potato code for hook
+   if (Global.AimSettings.heroes[localPlayer.heroId] == "RoadHog") {
+          key = Global.AimSettings.keys["LS"]
+          speed = 2
+          fov = 300
+          AimBot.shootClosestFov(key,speed,fov,drawfov)
+    }
+    // potato code for left click
+    if (Global.AimSettings.heroes[localPlayer.heroId] == "RoadHog") {
+          key = Global.AimSettings.keys["LB"]
+          speed = 10
+          fov = 100
+          AimBot.shootClosestFovNoPred(key,speed,fov,drawfov)
+    }
+    //potato code for right click
+    if (Global.AimSettings.heroes[localPlayer.heroId] == "RoadHog") {
+          key = Global.AimSettings.keys["RB"]
+          speed = 5
+          fov = 100
+          AimBot.shootClosestFovNoPred(key,speed,fov,drawfov)
+    }
+                //potato code for zarya
+    if (Global.AimSettings.heroes[localPlayer.heroId] == "Zarya") {
+          key = Global.AimSettings.keys["LB"]
+          speed = 13
+          fov = 100
           AimBot.shootClosestFov(key,speed,fov,drawfov)
     }
 
